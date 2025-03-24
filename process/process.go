@@ -140,7 +140,8 @@ func (p *Process) addToCron() {
 
 // Start process
 // Args:
-//  wait - true, wait the program started or failed
+//
+//	wait - true, wait the program started or failed
 func (p *Process) Start(wait bool) {
 	log.WithFields(log.Fields{"program": p.GetName()}).Info("try to start program")
 	p.lock.Lock()
@@ -322,10 +323,6 @@ func (p *Process) GetPriority() int {
 	return p.config.GetInt("priority", 999)
 }
 
-func (p *Process) getNumberProcs() int {
-	return p.config.GetInt("numprocs", 1)
-}
-
 // SendProcessStdin sends data to process stdin
 func (p *Process) SendProcessStdin(chars string) error {
 	if p.stdin != nil {
@@ -392,7 +389,6 @@ func (p *Process) getExitCodes() []int {
 }
 
 // check if the process is running or not
-//
 func (p *Process) isRunning() bool {
 	if p.cmd != nil && p.cmd.Process != nil {
 		if runtime.GOOS == "windows" {
@@ -486,7 +482,7 @@ func (p *Process) setProgramRestartChangeMonitor(programPath string) {
 }
 
 // wait for the started program exit
-func (p *Process) waitForExit(startSecs int64) {
+func (p *Process) waitForExit() {
 	p.cmd.Wait()
 	if p.cmd.ProcessState != nil {
 		log.WithFields(log.Fields{"program": p.GetName()}).Infof("program stopped with status:%v", p.cmd.ProcessState)
@@ -506,7 +502,6 @@ func (p *Process) failToStartProgram(reason string, finishCb func()) {
 }
 
 // monitor if the program is in running before endTime
-//
 func (p *Process) monitorProgramIsRunning(endTime time.Time, monitorExited *int32, programExited *int32) {
 	// if time is not expired
 	for time.Now().Before(endTime) && atomic.LoadInt32(programExited) == 0 {
@@ -622,7 +617,7 @@ func (p *Process) run(finishCb func()) {
 
 		procExitC := make(chan struct{})
 		go func() {
-			p.waitForExit(startSecs)
+			p.waitForExit()
 			close(procExitC)
 		}()
 
@@ -643,6 +638,16 @@ func (p *Process) run(finishCb func()) {
 		// wait for monitor thread exit
 		for atomic.LoadInt32(&monitorExited) == 0 {
 			time.Sleep(time.Duration(10) * time.Millisecond)
+		}
+
+		exitCode, err := p.getExitCode()
+		if err != nil || !p.inExitCodes(exitCode) {
+			log.WithFields(log.Fields{
+				"program":  p.GetName(),
+				"exitCode": exitCode,
+				"expected": p.getExitCodes(),
+			}).Error("Process exited unexpectedly. Shutting down supervisord.")
+			os.Exit(1)
 		}
 
 		p.lock.Lock()
@@ -700,9 +705,9 @@ func (p *Process) changeStateTo(procState State) {
 // Signal sends signal to the process
 //
 // Args:
-//   sig - the signal to the process
-//   sigChildren - if true, sends the same signal to the process and its children
 //
+//	sig - the signal to the process
+//	sigChildren - if true, sends the same signal to the process and its children
 func (p *Process) Signal(sig os.Signal, sigChildren bool) error {
 	p.lock.RLock()
 	defer p.lock.RUnlock()
@@ -727,9 +732,9 @@ func (p *Process) sendSignals(sigs []string, sigChildren bool) {
 // send signal to the process
 //
 // Args:
-//    sig - the signal to be sent
-//    sigChildren - if true, the signal also will be sent to children processes too
 //
+//	sig - the signal to be sent
+//	sigChildren - if true, the signal also will be sent to children processes too
 func (p *Process) sendSignal(sig os.Signal, sigChildren bool) error {
 	if p.cmd != nil && p.cmd.Process != nil {
 		log.WithFields(log.Fields{"program": p.GetName(), "signal": sig}).Info("Send signal to program")
@@ -740,7 +745,7 @@ func (p *Process) sendSignal(sig os.Signal, sigChildren bool) error {
 }
 
 func (p *Process) setEnv() {
-	envFromFiles := p.config.GetEnvFromFiles("envFiles")
+	envFromFiles := p.config.GetEnv("envFiles")
 	env := p.config.GetEnv("environment")
 	if len(env)+len(envFromFiles) != 0 {
 		p.cmd.Env = append(append(os.Environ(), envFromFiles...), env...)
@@ -842,10 +847,6 @@ func (p *Process) registerEventListener(eventListenerName string,
 		stdout,
 		p.config.GetInt("buffer_size", 100))
 	events.RegisterEventListener(eventListenerName, _events, eventListener)
-}
-
-func (p *Process) unregisterEventListener(eventListenerName string) {
-	events.UnregisterEventListener(eventListenerName)
 }
 
 func (p *Process) createStdoutLogger() logger.Logger {

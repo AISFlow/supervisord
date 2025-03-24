@@ -3,16 +3,15 @@ package config
 import (
 	"bytes"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
 
-	"github.com/hashicorp/go-envparse"
 	"github.com/ochinchina/go-ini"
 	log "github.com/sirupsen/logrus"
+	"github.com/subosito/gotenv"
 )
 
 // Entry standards for a configuration section in supervisor configuration file
@@ -74,10 +73,6 @@ func (c *Entry) GetPrograms() []string {
 	return make([]string, 0)
 }
 
-func (c *Entry) setGroup(group string) {
-	c.Group = group
-}
-
 // String dumps configuration as a string
 func (c *Entry) String() string {
 	buf := bytes.NewBuffer(make([]byte, 0))
@@ -117,7 +112,6 @@ func (c *Config) createEntry(name string, configDir string) *Entry {
 	return entry
 }
 
-//
 // Load the configuration and return loaded programs
 func (c *Config) Load() ([]string, error) {
 	myini := ini.NewIni()
@@ -151,7 +145,7 @@ func (c *Config) getIncludeFiles(cfg *ini.Ini) []string {
 				} else {
 					dir = filepath.Join(c.GetConfigFileDir(), filepath.Dir(f))
 				}
-				fileInfos, err := ioutil.ReadDir(dir)
+				fileInfos, err := os.ReadDir(dir) // Updated to use os.ReadDir
 				if err == nil {
 					goPattern := toRegexp(filepath.Base(f))
 					for _, fileInfo := range fileInfos {
@@ -389,7 +383,7 @@ func parseEnvFiles(s string) *map[string]string {
 			}).Error("Read file failed: " + envFilePath)
 			continue
 		}
-		r, err := envparse.Parse(f)
+		r, err := gotenv.StrictParse(f)
 		if err != nil {
 			log.WithFields(log.Fields{
 				log.ErrorKey: err,
@@ -405,7 +399,8 @@ func parseEnvFiles(s string) *map[string]string {
 }
 
 // GetEnv returns slice of strings with keys separated from values by single "=". An environment string example:
-//  environment = A="env 1",B="this is a test"
+//
+//	environment = A="env 1",B="this is a test"
 func (c *Entry) GetEnv(key string) []string {
 	value, ok := c.keyValues[key]
 	result := make([]string, 0)
@@ -426,7 +421,9 @@ func (c *Entry) GetEnv(key string) []string {
 }
 
 // GetEnvFromFiles returns slice of strings with keys separated from values by single "=". An envFile example:
-//  envFiles = global.env,prod.env
+//
+//	envFiles = global.env,prod.env
+//
 // cat global.env
 // varA=valueA
 func (c *Entry) GetEnvFromFiles(key string) []string {
@@ -512,7 +509,6 @@ func (c *Entry) GetStringArray(key string, sep string) []string {
 //	logSize=1GB
 //	logSize=1KB
 //	logSize=1024
-//
 func (c *Entry) GetBytes(key string, defValue int) int {
 	v, ok := c.keyValues[key]
 
