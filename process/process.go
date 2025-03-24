@@ -559,17 +559,14 @@ func (p *Process) run(finishCb func()) {
 		}
 
 		err = p.cmd.Start()
-
+		// Terminate supervisord immediately to allow Docker to restart the container on process startup failure
 		if err != nil {
-			if atomic.LoadInt32(p.retryTimes) >= p.getStartRetries() {
-				p.failToStartProgram(fmt.Sprintf("fail to start program with error:%v", err), finishCbWrapper)
-				break
-			} else {
-				log.WithFields(log.Fields{"program": p.GetName()}).Info("fail to start program with error:", err)
-				p.changeStateTo(Backoff)
-				continue
-			}
+			log.WithFields(log.Fields{
+				"program": p.GetName(),
+				"error":   err,
+			}).Fatal("Failed to start process. Exiting supervisord")
 		}
+
 		if p.StdoutLog != nil {
 			p.StdoutLog.SetPid(p.cmd.Process.Pid)
 		}

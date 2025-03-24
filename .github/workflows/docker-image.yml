@@ -10,7 +10,8 @@ env:
   REGISTRY_GHCR: ghcr.io
   REGISTRY_DOCKER: docker.io
   IMAGE_NAME: ${{ github.repository }}
-
+  RELEASE_VERSION: ${{ github.ref_name }}
+  
 jobs:
   set-up:
     runs-on: ubuntu-latest
@@ -99,6 +100,8 @@ jobs:
             ${{ env.REGISTRY_DOCKER }}/${{ needs.set-up.outputs.lower_case_image_name }}:${{ matrix.arch }}
           labels: ${{ needs.set-up.outputs.labels }}
           platforms: ${{ matrix.platform }}
+          build-args: |
+            VERSION=${{ env.RELEASE_VERSION }}
 
   manifest:
     needs: [set-up, build]
