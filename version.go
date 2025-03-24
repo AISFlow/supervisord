@@ -2,7 +2,7 @@ package main
 
 import "fmt"
 
-var VERSION = "dev"
+var VERSION = "v1.0.0"
 
 type VersionCommand struct{}
 
